@@ -503,8 +503,9 @@
     }
     els.loans.innerHTML = loans.rows.map(function (l) {
       var end = l.endDate ? new Date(l.endDate).toLocaleDateString('hu-HU') : '—';
+      var lenderLabel = [l.lender, l.type].filter(Boolean).join(' · ');
       return '<div class="loan-card">' +
-        '<div class="loan-head"><span class="loan-name">' + esc(l.name) + '</span><span class="loan-lender">' + esc(l.lender) + '</span></div>' +
+        '<div class="loan-head"><span class="loan-name">' + esc(l.name) + '</span><span class="loan-lender">' + esc(lenderLabel) + '</span></div>' +
         '<div class="loan-rows">' +
         '<div><span class="k">fennmaradó tőke</span><span class="v">' + fmtFt(l.remaining) + '</span></div>' +
         '<div><span class="k">havi törlesztő</span><span class="v">' + fmtFt(l.monthly) + '</span></div>' +

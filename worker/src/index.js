@@ -244,6 +244,14 @@ async function loadNetWorth(env) {
   };
 }
 
+// A "Hitelek & Lízingek" adatbázis sémája: nincs külön "Kamat (%)" oszlopa —
+// a kamat (ha ismert) a Megjegyzés szövegében szerepel ("kamat 12.49%" stb.),
+// onnan próbáljuk kiolvasni.
+function extractRatePct(note) {
+  var m = note && note.match(/kamat[:\s]*([\d.,]+)\s*%/i);
+  return m ? parseFloat(m[1].replace(',', '.')) : null;
+}
+
 async function loadLoans(env) {
   if (!env.DB_HITELEK) return { rows: [], totalRemaining: 0, totalMonthly: 0 };
   const pages = await queryAll(env, env.DB_HITELEK, {
@@ -252,14 +260,16 @@ async function loadLoans(env) {
   });
   const rows = pages.map((pg) => {
     const p = pg.properties;
+    const note = text(p['Megjegyzés']);
     return {
       name: title(p.Name),
       lender: text(p['Hitelező']),
-      remaining: num(p['Fennmaradó tőke (Ft)']) || 0,
+      type: select(p['Típus']),
+      remaining: num(p['Fennmaradó tartozás (Ft)']) || 0,
       monthly: num(p['Havi törlesztő (Ft)']) || 0,
-      ratePct: num(p['Kamat (%)']),
-      endDate: date(p['Futamidő vége']),
-      note: text(p['Megjegyzés'])
+      ratePct: extractRatePct(note),
+      endDate: date(p['Lejárat']),
+      note
     };
   });
   return {
