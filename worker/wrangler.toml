@@ -4,10 +4,16 @@ compatibility_date = "2024-01-01"
 
 # Nem-titkos azonosítók (a database ID önmagában nem ad hozzáférést,
 # csak a NOTION_TOKEN-nel együtt jelent bármit).
+# FONTOS: ezeknek a Notion adatbázis (database) ID-nak kell lenniük, NEM a
+# "data source" ID-nak — a kettő eltérő UUID az újabb Notion-adatmodellben,
+# és a 2022-06-28-as Notion API verzió a database ID-t várja.
 [vars]
 DB_SZAMLAK = "75433ba302c34a02a22080a8ee14998f"
 DB_TRANZAKCIOK = "a8c14e0a4e5043368da6036558638bca"
 DB_NETWORTH = "f57d004241e8429c9c0dd82206a95aa4"
+DB_HITELEK = "f73281e888504d99abb513b9e1457ec8"
+DB_KESZPENZ = "fb8fcb11ec164933a60705b721f101aa"
+DB_TEENDOK = "33348cc2b0714680a7c6a87605430404"
 
 # Javasolt havi keretek (Ft) — a "mire ment" widget ezekhez méri a folyó
 # havi Élelmiszer, illetve Vendéglátás/étkezés + Egyéb vásárlás/szolgáltatás

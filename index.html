@@ -16,6 +16,7 @@
     --gold:#A9782B; --gold-soft:#F1E6CC;
     --income:#0E8A73; --income-soft:#DDF0E9;
     --expense:#D14A2C; --expense-soft:#FBE4DD;
+    --info:#3B6FA0; --info-soft:#E1EBF5;
     --shadow: 0 1px 2px rgba(22,36,28,.06), 0 8px 24px -12px rgba(22,36,28,.18);
     --font-display: 'Fraunces', Georgia, serif;
     --font-body: 'IBM Plex Sans', -apple-system, 'Segoe UI', sans-serif;
@@ -29,6 +30,7 @@
       --gold:#D9A94A; --gold-soft:#332A16;
       --income:#2A9E86; --income-soft:#173028;
       --expense:#E06840; --expense-soft:#331E15;
+      --info:#6FA3D8; --info-soft:#182634;
       --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 30px -14px rgba(0,0,0,.6);
     }
   }
@@ -39,10 +41,10 @@
     -webkit-font-smoothing:antialiased; margin:0;
     padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
   }
-  .wrap{max-width:760px;margin:0 auto;padding:28px 20px 96px;}
+  .wrap{max-width:760px;margin:0 auto;padding:28px 20px 40px;}
   [hidden]{display:none !important;}
 
-  .masthead{display:flex; align-items:baseline; justify-content:space-between; gap:16px; padding-bottom:18px; margin-bottom:26px; border-bottom:2px solid var(--ink); flex-wrap:wrap;}
+  .masthead{display:flex; align-items:baseline; justify-content:space-between; gap:16px; padding-bottom:18px; margin-bottom:18px; border-bottom:2px solid var(--ink); flex-wrap:wrap;}
   .masthead-title{font-family:var(--font-display); font-weight:600; font-size:30px; letter-spacing:-.01em;}
   .masthead-title em{font-style:italic; color:var(--gold);}
   .masthead-meta{font-family:var(--font-mono); font-size:11px; color:var(--ink-3); text-align:right; line-height:1.6;}
@@ -51,6 +53,39 @@
     font-family:var(--font-mono); font-size:11px; padding:5px 10px; cursor:pointer; margin-top:4px;
   }
   .refresh-btn:active{background:var(--surface-2);}
+
+  /* ---- Tabs (health-dashboard pattern) ---- */
+  .hd-tabs{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:28px;}
+  .hd-tab-btn{
+    font-family:var(--font-body); font-weight:500; font-size:12.5px; color:var(--ink-2);
+    background:var(--surface); border:1px solid var(--border); border-radius:20px;
+    padding:7px 14px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+    transition:background .12s,color .12s,border-color .12s;
+  }
+  .hd-tab-btn .ic{font-size:13px;}
+  .hd-tab-btn:hover{border-color:var(--border-strong);}
+  .hd-tab-btn.active{background:var(--ink); color:var(--bg); border-color:var(--ink);}
+  .hd-tab-panel{display:none;}
+  .hd-tab-panel.active{display:block;}
+
+  .hd-bottom-nav{display:none;}
+  @media (max-width:680px){
+    .hd-tabs{display:none;}
+    body{padding-bottom:calc(64px + env(safe-area-inset-bottom));}
+    .hd-bottom-nav{
+      display:flex; position:fixed; left:0; right:0; bottom:0; z-index:40;
+      background:var(--surface); border-top:1px solid var(--border);
+      padding:6px 2px calc(6px + env(safe-area-inset-bottom));
+      overflow-x:auto; -webkit-overflow-scrolling:touch;
+    }
+    .hd-nav-btn{
+      flex:1 0 auto; min-width:58px; background:none; border:none; color:var(--ink-3);
+      font-family:var(--font-body); font-size:9.5px; display:flex; flex-direction:column;
+      align-items:center; gap:2px; padding:5px 4px; cursor:pointer;
+    }
+    .hd-nav-btn .ic{font-size:17px;}
+    .hd-nav-btn.active{color:var(--gold);}
+  }
 
   .eyebrow{font-family:var(--font-mono); font-size:11px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3); margin-bottom:10px; display:flex; align-items:center; gap:10px;}
   .eyebrow::after{content:"";flex:1;height:1px;background:var(--border-strong);}
@@ -68,6 +103,14 @@
   .verdict-row .v{font-family:var(--font-mono); font-variant-numeric:tabular-nums;}
   .verdict-row .v.pos{color:var(--income);}
   .verdict-row .v.neg{color:var(--expense);}
+
+  /* ---- Advice ("ejnye-bejnye") ---- */
+  .advice-list{display:flex; flex-direction:column; gap:10px;}
+  .advice-card{border-radius:12px; padding:13px 16px; font-size:13px; line-height:1.55; border:1px solid transparent; display:flex; gap:10px; align-items:flex-start;}
+  .advice-card .ic{font-size:16px; line-height:1.4;}
+  .advice-card.warn{background:var(--expense-soft); color:var(--expense); border-color:var(--expense);}
+  .advice-card.praise{background:var(--income-soft); color:var(--income); border-color:var(--income);}
+  .advice-card.info{background:var(--info-soft); color:var(--info); border-color:var(--info);}
 
   .rate-value{font-family:var(--font-mono); font-weight:500; font-size:32px; font-variant-numeric:tabular-nums;}
   .rate-value.neg{color:var(--expense);}
@@ -128,6 +171,7 @@
   .acct-name{font-size:12px; color:var(--ink-2);}
   .acct-value{font-family:var(--font-mono); font-size:17px; margin-top:6px; font-variant-numeric:tabular-nums;}
   .acct-date{font-size:10.5px; color:var(--ink-3); margin-top:4px;}
+  .acct-note{font-size:10.5px; color:var(--gold); margin-top:4px;}
 
   .whatif-card{background:linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); padding:20px 20px;}
   .whatif-row{display:flex; flex-direction:column; gap:10px; margin-bottom:18px;}
@@ -139,6 +183,56 @@
 
   .goal-card{border:1px dashed var(--border-strong); border-radius:12px; padding:16px 18px; font-size:12.5px; color:var(--ink-3); line-height:1.6;}
   .goal-name{font-family:var(--font-display); font-weight:600; font-size:14px; color:var(--ink); margin-bottom:6px;}
+
+  /* ---- Loans ---- */
+  .loan-grid{display:flex; flex-direction:column; gap:10px;}
+  .loan-card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:15px 18px; box-shadow:var(--shadow);}
+  .loan-head{display:flex; justify-content:space-between; align-items:baseline; gap:10px;}
+  .loan-name{font-family:var(--font-display); font-weight:600; font-size:15px;}
+  .loan-lender{font-size:11.5px; color:var(--ink-3);}
+  .loan-rows{margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:8px 16px; font-size:12.5px;}
+  .loan-rows .k{color:var(--ink-3); display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.03em;}
+  .loan-rows .v{font-family:var(--font-mono); font-variant-numeric:tabular-nums;}
+  .loan-totals{display:flex; gap:14px; margin-bottom:14px;}
+  .loan-totals .tile{flex:1;}
+
+  /* ---- Cash tracker ---- */
+  .cash-summary{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;}
+  .cash-person{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; box-shadow:var(--shadow);}
+  .cash-person-name{font-family:var(--font-display); font-weight:600; font-size:15px; margin-bottom:8px;}
+  .cash-person-row{display:flex; justify-content:space-between; font-size:12.5px; margin-top:4px;}
+  .cash-person-row .v{font-family:var(--font-mono); font-variant-numeric:tabular-nums;}
+  .cash-form{background:var(--surface); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); padding:18px 20px; margin-bottom:18px;}
+  .cash-form-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .cash-form label{display:block; font-size:10.5px; color:var(--ink-3); text-transform:uppercase; letter-spacing:.03em; margin-bottom:5px; margin-top:10px;}
+  .cash-form select, .cash-form input{width:100%; padding:9px 10px; border-radius:8px; border:1px solid var(--border-strong); background:var(--bg); color:var(--ink); font-family:var(--font-body); font-size:13px;}
+  .cash-form button{margin-top:16px; width:100%; padding:11px; border-radius:8px; border:none; background:var(--ink); color:var(--bg); font-weight:600; font-size:13.5px; cursor:pointer;}
+  .cash-form-msg{font-size:12px; margin-top:10px;}
+  .cash-form-msg.ok{color:var(--income);}
+  .cash-form-msg.err{color:var(--expense);}
+  .cash-entries{background:var(--surface); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); overflow:hidden;}
+  .cash-entry-row{display:grid; grid-template-columns:auto 1fr auto; gap:10px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--border); font-size:12.5px;}
+  .cash-entry-row:last-child{border-bottom:none;}
+  .cash-entry-row .who{font-weight:600;}
+  .cash-entry-row .meta{color:var(--ink-3); font-size:11px;}
+  .cash-entry-row .amt{font-family:var(--font-mono); font-variant-numeric:tabular-nums; white-space:nowrap;}
+  .cash-entry-row .amt.in{color:var(--income);} .cash-entry-row .amt.out{color:var(--expense);}
+
+  /* ---- Todos ---- */
+  .todo-grid{display:flex; flex-direction:column; gap:10px;}
+  .todo-card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; box-shadow:var(--shadow); display:flex; gap:12px; align-items:flex-start;}
+  .todo-num{font-family:var(--font-display); font-weight:600; font-size:20px; color:var(--gold); min-width:26px;}
+  .todo-name{font-size:13.5px; font-weight:600;}
+  .todo-desc{font-size:12.5px; color:var(--ink-2); margin-top:4px; line-height:1.5;}
+  .todo-meta{margin-top:8px; display:flex; gap:10px; flex-wrap:wrap;}
+  .todo-badge{font-family:var(--font-mono); font-size:9.5px; letter-spacing:.03em; text-transform:uppercase; padding:2px 8px; border-radius:20px;}
+  .todo-badge.prio-magas{background:var(--expense-soft); color:var(--expense);}
+  .todo-badge.prio-közepes{background:var(--gold-soft); color:var(--gold);}
+  .todo-badge.prio-alacsony{background:var(--surface-2); color:var(--ink-3);}
+  .todo-badge.saving{background:var(--income-soft); color:var(--income);}
+
+  /* ---- Tithe ---- */
+  .tithe-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;}
 
   footer{margin-top:44px; padding-top:16px; border-top:1px solid var(--border); font-size:11px; color:var(--ink-3); line-height:1.6;}
 
@@ -159,6 +253,10 @@
     .tiles{grid-template-columns:1fr;}
     .accounts-grid{grid-template-columns:1fr;}
     .whatif-outputs{grid-template-columns:1fr;}
+    .loan-rows{grid-template-columns:1fr 1fr;}
+    .cash-summary{grid-template-columns:1fr;}
+    .cash-form-grid{grid-template-columns:1fr;}
+    .tithe-grid{grid-template-columns:1fr;}
   }
 </style>
 </head>
@@ -193,84 +291,204 @@
     </div>
   </div>
 
-  <section>
-    <div class="eyebrow">a lényeg</div>
-    <div class="card">
-      <div class="verdict-num" id="verdictNum">&mdash;</div>
-      <div class="verdict-label" id="verdictLabel"></div>
-      <div class="verdict-rows" id="verdictRows"></div>
-    </div>
-  </section>
+  <nav class="hd-tabs" id="hdTabs">
+    <button class="hd-tab-btn" data-tab="attekintes"><span class="ic">🏠</span>Áttekintés</button>
+    <button class="hd-tab-btn" data-tab="tranzakciok"><span class="ic">📒</span>Tranzakciók</button>
+    <button class="hd-tab-btn" data-tab="koltsegvetes"><span class="ic">🎯</span>Költségvetés</button>
+    <button class="hd-tab-btn" data-tab="vagyon"><span class="ic">🏦</span>Vagyon</button>
+    <button class="hd-tab-btn" data-tab="megtakaritas"><span class="ic">💰</span>Megtakarítás</button>
+    <button class="hd-tab-btn" data-tab="hitelek"><span class="ic">💳</span>Hitelek</button>
+    <button class="hd-tab-btn" data-tab="keszpenz"><span class="ic">💵</span>Készpénz</button>
+    <button class="hd-tab-btn" data-tab="teendok"><span class="ic">✅</span>Teendők</button>
+    <button class="hd-tab-btn" data-tab="tized"><span class="ic">🙏</span>Tized</button>
+  </nav>
 
-  <section>
-    <div class="eyebrow">megtakarítási ráta</div>
-    <div class="card">
-      <div class="rate-value" id="rateValue">&mdash;</div>
-      <div style="font-size:12px;color:var(--ink-2);margin-top:4px;">(bevétel &minus; core kiadás) / bevétel, elmúlt 3 lezárt hónap átlaga</div>
-      <div class="rate-track"><div class="rate-zero" style="left:50%"></div><div class="rate-fill" id="rateFill"></div></div>
-      <div class="rate-scale"><span>&minus;30%</span><span>&minus;15%</span><span>0%</span><span>+15%</span><span>+30%</span></div>
-    </div>
-  </section>
+  <!-- ============================= ÁTTEKINTÉS ============================= -->
+  <div class="hd-tab-panel" data-tab="attekintes">
 
-  <section>
-    <div class="tiles" id="tiles"></div>
-  </section>
-
-  <section>
-    <div class="eyebrow">havi trend</div>
-    <div class="chart-card">
-      <div class="legend"><span><i class="inc"></i>bevétel</span><span><i class="exp"></i>kiadás (nyers)</span><span><i class="core"></i>kiadás (egyszeriek nélkül)</span></div>
-      <svg id="trendSvg" viewBox="0 0 700 220" preserveAspectRatio="none"></svg>
-    </div>
-  </section>
-
-  <section>
-    <div class="eyebrow">mire ment &middot; elmúlt lezárt hónapok</div>
-    <div class="ledger" id="ledger"></div>
-  </section>
-
-  <section>
-    <div class="eyebrow">keretek ebben a hónapban</div>
-    <div class="budget-grid" id="budgets"></div>
-  </section>
-
-  <section>
-    <div class="eyebrow">fix vs. rugalmas kiadás</div>
-    <div class="split-bar" id="splitBar"></div>
-    <div class="split-legend" id="splitLegend"></div>
-  </section>
-
-  <section>
-    <div class="eyebrow">számlák</div>
-    <div class="accounts-grid" id="accounts"></div>
-  </section>
-
-  <section>
-    <div class="eyebrow">célok</div>
-    <div id="goals"></div>
-  </section>
-
-  <section>
-    <div class="eyebrow">mi lenne, ha kevesebbet költenél</div>
-    <div class="whatif-card">
-      <div class="whatif-row">
-        <label for="cutSlider" style="font-size:12px;color:var(--ink-2);">havi core kiadás csökkentése</label>
-        <input type="range" id="cutSlider" min="0" max="400000" step="10000" value="0">
-        <div class="whatif-cut" id="cutValue">0 Ft/hó</div>
+    <section>
+      <div class="eyebrow">a lényeg</div>
+      <div class="card">
+        <div class="verdict-num" id="verdictNum">&mdash;</div>
+        <div class="verdict-label" id="verdictLabel"></div>
+        <div class="verdict-rows" id="verdictRows"></div>
       </div>
-      <div class="whatif-outputs">
-        <div><div class="t-label">új havi egyenleg</div><div class="whatif-num" id="outBalance">&mdash;</div></div>
-        <div><div class="t-label">futamidő</div><div class="whatif-num" id="outRunway">&mdash;</div></div>
-        <div><div class="t-label">évi hatás</div><div class="whatif-num" id="outYearly" style="color:var(--gold)">&mdash;</div></div>
+    </section>
+
+    <section>
+      <div class="eyebrow">tanácsok &amp; ejnye-bejnyék</div>
+      <div class="advice-list" id="advice"></div>
+    </section>
+
+    <section>
+      <div class="eyebrow">megtakarítási ráta</div>
+      <div class="card">
+        <div class="rate-value" id="rateValue">&mdash;</div>
+        <div style="font-size:12px;color:var(--ink-2);margin-top:4px;">(bevétel &minus; core kiadás) / bevétel, elmúlt 3 lezárt hónap átlaga</div>
+        <div class="rate-track"><div class="rate-zero" style="left:50%"></div><div class="rate-fill" id="rateFill"></div></div>
+        <div class="rate-scale"><span>&minus;30%</span><span>&minus;15%</span><span>0%</span><span>+15%</span><span>+30%</span></div>
       </div>
-    </div>
-  </section>
+    </section>
+
+    <section>
+      <div class="tiles" id="tiles"></div>
+    </section>
+
+    <section>
+      <div class="eyebrow">havi trend</div>
+      <div class="chart-card">
+        <div class="legend"><span><i class="inc"></i>bevétel</span><span><i class="exp"></i>kiadás (nyers)</span><span><i class="core"></i>kiadás (egyszeriek nélkül)</span></div>
+        <svg id="trendSvg" viewBox="0 0 700 220" preserveAspectRatio="none"></svg>
+      </div>
+    </section>
+
+    <section>
+      <div class="eyebrow">mi lenne, ha kevesebbet költenél</div>
+      <div class="whatif-card">
+        <div class="whatif-row">
+          <label for="cutSlider" style="font-size:12px;color:var(--ink-2);">havi core kiadás csökkentése</label>
+          <input type="range" id="cutSlider" min="0" max="400000" step="10000" value="0">
+          <div class="whatif-cut" id="cutValue">0 Ft/hó</div>
+        </div>
+        <div class="whatif-outputs">
+          <div><div class="t-label">új havi egyenleg</div><div class="whatif-num" id="outBalance">&mdash;</div></div>
+          <div><div class="t-label">futamidő</div><div class="whatif-num" id="outRunway">&mdash;</div></div>
+          <div><div class="t-label">évi hatás</div><div class="whatif-num" id="outYearly" style="color:var(--gold)">&mdash;</div></div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ============================= TRANZAKCIÓK ============================= -->
+  <div class="hd-tab-panel" data-tab="tranzakciok">
+    <section>
+      <div class="eyebrow">mire ment &middot; elmúlt lezárt hónapok</div>
+      <div class="ledger" id="ledger"></div>
+    </section>
+  </div>
+
+  <!-- ============================= KÖLTSÉGVETÉS ============================= -->
+  <div class="hd-tab-panel" data-tab="koltsegvetes">
+    <section>
+      <div class="eyebrow">keretek ebben a hónapban</div>
+      <div class="budget-grid" id="budgets"></div>
+    </section>
+    <section>
+      <div class="eyebrow">fix vs. rugalmas kiadás</div>
+      <div class="split-bar" id="splitBar"></div>
+      <div class="split-legend" id="splitLegend"></div>
+    </section>
+  </div>
+
+  <!-- ============================= VAGYON ============================= -->
+  <div class="hd-tab-panel" data-tab="vagyon">
+    <section>
+      <div class="eyebrow">számlák</div>
+      <div class="accounts-grid" id="accounts"></div>
+    </section>
+    <section>
+      <div class="eyebrow">célok</div>
+      <div id="goals"></div>
+    </section>
+  </div>
+
+  <!-- ============================= MEGTAKARÍTÁS ============================= -->
+  <div class="hd-tab-panel" data-tab="megtakaritas">
+    <section>
+      <div class="eyebrow">megtakarítások &amp; befektetések</div>
+      <div class="accounts-grid" id="savingsAccounts"></div>
+    </section>
+  </div>
+
+  <!-- ============================= HITELEK ============================= -->
+  <div class="hd-tab-panel" data-tab="hitelek">
+    <section>
+      <div class="loan-totals" id="loanTotals"></div>
+      <div class="eyebrow">futó hitelek</div>
+      <div class="loan-grid" id="loans"></div>
+    </section>
+  </div>
+
+  <!-- ============================= KÉSZPÉNZ ============================= -->
+  <div class="hd-tab-panel" data-tab="keszpenz">
+    <section>
+      <div class="eyebrow">összesítés</div>
+      <div class="cash-summary" id="cashSummary"></div>
+
+      <form class="cash-form" id="cashForm">
+        <div class="eyebrow" style="margin-bottom:0;">új tétel</div>
+        <div class="cash-form-grid">
+          <div>
+            <label for="cashPerson">Személy</label>
+            <select id="cashPerson">
+              <option value="Én">Én</option>
+              <option value="Detti">Detti</option>
+            </select>
+          </div>
+          <div>
+            <label for="cashKind">Típus</label>
+            <select id="cashKind">
+              <option value="Kapott">Kapott</option>
+              <option value="Költött">Költött</option>
+            </select>
+          </div>
+        </div>
+        <label for="cashAmount">Összeg (Ft)</label>
+        <input id="cashAmount" type="number" inputmode="numeric" min="1" step="1" placeholder="pl. 5000">
+        <label for="cashNote">Megjegyzés</label>
+        <input id="cashNote" type="text" placeholder="opcionális">
+        <button type="submit" id="cashSubmit">Mentés Notionbe</button>
+        <div class="cash-form-msg" id="cashMsg" hidden></div>
+      </form>
+
+      <div class="eyebrow">utolsó tételek</div>
+      <div class="cash-entries" id="cashEntries"></div>
+    </section>
+  </div>
+
+  <!-- ============================= TEENDŐK ============================= -->
+  <div class="hd-tab-panel" data-tab="teendok">
+    <section>
+      <div class="eyebrow">a következő 3 legfontosabb lépés</div>
+      <div class="todo-grid" id="todoSteps"></div>
+    </section>
+    <section>
+      <div class="eyebrow">min lehetne még spórolni</div>
+      <div class="todo-grid" id="todoSaving"></div>
+    </section>
+    <section>
+      <div class="eyebrow">mit érne eladni / lecserélni</div>
+      <div class="todo-grid" id="todoSell"></div>
+    </section>
+  </div>
+
+  <!-- ============================= TIZED ============================= -->
+  <div class="hd-tab-panel" data-tab="tized">
+    <section>
+      <div class="eyebrow">ebben a hónapban</div>
+      <div class="tithe-grid" id="titheTiles"></div>
+      <div class="card" id="titheNote" style="font-size:13px;color:var(--ink-2);line-height:1.6;"></div>
+    </section>
+  </div>
 
   <footer>
     Élőben olvasva a Notion &bdquo;💰 Pénzügyek&rdquo; adatbázisaiból egy Cloudflare Workeren keresztül. Nem hivatalos kimutatás, nem pénzügyi tanácsadás.
   </footer>
 
 </div>
+
+<nav class="hd-bottom-nav" id="hdBottomNav">
+  <button class="hd-nav-btn" data-tab="attekintes"><span class="ic">🏠</span>Áttekintés</button>
+  <button class="hd-nav-btn" data-tab="tranzakciok"><span class="ic">📒</span>Tranzakciók</button>
+  <button class="hd-nav-btn" data-tab="koltsegvetes"><span class="ic">🎯</span>Keretek</button>
+  <button class="hd-nav-btn" data-tab="vagyon"><span class="ic">🏦</span>Vagyon</button>
+  <button class="hd-nav-btn" data-tab="megtakaritas"><span class="ic">💰</span>Megtak.</button>
+  <button class="hd-nav-btn" data-tab="hitelek"><span class="ic">💳</span>Hitelek</button>
+  <button class="hd-nav-btn" data-tab="keszpenz"><span class="ic">💵</span>Készpénz</button>
+  <button class="hd-nav-btn" data-tab="teendok"><span class="ic">✅</span>Teendők</button>
+  <button class="hd-nav-btn" data-tab="tized"><span class="ic">🙏</span>Tized</button>
+</nav>
 
 <script src="app.js"></script>
 </body>

@@ -21,6 +21,7 @@
     verdictNum: document.getElementById('verdictNum'),
     verdictLabel: document.getElementById('verdictLabel'),
     verdictRows: document.getElementById('verdictRows'),
+    advice: document.getElementById('advice'),
     rateValue: document.getElementById('rateValue'),
     rateFill: document.getElementById('rateFill'),
     tiles: document.getElementById('tiles'),
@@ -30,7 +31,24 @@
     splitBar: document.getElementById('splitBar'),
     splitLegend: document.getElementById('splitLegend'),
     accounts: document.getElementById('accounts'),
+    savingsAccounts: document.getElementById('savingsAccounts'),
     goals: document.getElementById('goals'),
+    loanTotals: document.getElementById('loanTotals'),
+    loans: document.getElementById('loans'),
+    cashSummary: document.getElementById('cashSummary'),
+    cashEntries: document.getElementById('cashEntries'),
+    cashForm: document.getElementById('cashForm'),
+    cashPerson: document.getElementById('cashPerson'),
+    cashKind: document.getElementById('cashKind'),
+    cashAmount: document.getElementById('cashAmount'),
+    cashNote: document.getElementById('cashNote'),
+    cashSubmit: document.getElementById('cashSubmit'),
+    cashMsg: document.getElementById('cashMsg'),
+    todoSteps: document.getElementById('todoSteps'),
+    todoSaving: document.getElementById('todoSaving'),
+    todoSell: document.getElementById('todoSell'),
+    titheTiles: document.getElementById('titheTiles'),
+    titheNote: document.getElementById('titheNote'),
     cutSlider: document.getElementById('cutSlider'),
     cutValue: document.getElementById('cutValue'),
     outBalance: document.getElementById('outBalance'),
@@ -95,6 +113,36 @@
     loadDashboard();
   });
 
+  // ---- tabs ---------------------------------------------------------------
+  var TAB_KEY = 'pk_tab';
+  function activateTab(tabName) {
+    var panels = document.querySelectorAll('.hd-tab-panel');
+    for (var i = 0; i < panels.length; i++) {
+      panels[i].classList.toggle('active', panels[i].getAttribute('data-tab') === tabName);
+    }
+    var btnGroups = [document.querySelectorAll('#hdTabs .hd-tab-btn'), document.querySelectorAll('#hdBottomNav .hd-nav-btn')];
+    btnGroups.forEach(function (btns) {
+      for (var j = 0; j < btns.length; j++) {
+        btns[j].classList.toggle('active', btns[j].getAttribute('data-tab') === tabName);
+      }
+    });
+    try { localStorage.setItem(TAB_KEY, tabName); } catch (e) {}
+  }
+
+  function initTabs() {
+    var buttons = document.querySelectorAll('#hdTabs .hd-tab-btn, #hdBottomNav .hd-nav-btn');
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].addEventListener('click', function (ev) {
+        activateTab(ev.currentTarget.getAttribute('data-tab'));
+        window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+      });
+    }
+    var saved = null;
+    try { saved = localStorage.getItem(TAB_KEY); } catch (e) {}
+    activateTab(saved || 'attekintes');
+  }
+  initTabs();
+
   // ---- formatting helpers ------------------------------------------------
   function fmtFt(n) {
     if (n == null || isNaN(n)) return '—';
@@ -130,6 +178,12 @@
     var datePart = d.toLocaleDateString('hu-HU');
     var timePart = d.toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit' });
     return 'frissítve: ' + datePart + ' ' + timePart;
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
   }
 
   // ---- fetch + orchestration --------------------------------------------
@@ -185,14 +239,20 @@
   function render(data) {
     els.generatedAt.textContent = fmtGeneratedAt(data.generatedAt);
     renderVerdict(data);
+    renderAdvice(data.advice || []);
     renderRate(data.savingsRatePct);
     renderTiles(data.verdict);
     renderTrend(data.trend || []);
     renderLedger(data.categories || []);
     renderBudgets(data.budgets);
     renderSplit(data.split);
-    renderAccounts(data.accounts || []);
+    renderAccounts(els.accounts, data.accounts || [], 'Nincs feltöltött számla a Notion &bdquo;Számlák&rdquo; adatbázisban.');
+    renderAccounts(els.savingsAccounts, data.savingsAccounts || [], 'Még nincs feltöltve megtakarítási / befektetési számla — vedd fel a Notion &bdquo;Számlák&rdquo; adatbázisában (pl. IBKR, TBSZ, Lakástakarékpénztár).');
     renderGoals(data.netWorth);
+    renderLoans(data.loans);
+    renderCash(data.cash);
+    renderTodos(data.todos);
+    renderTithe(data.giving, data.verdict);
     renderWhatIf(data.verdict);
   }
 
@@ -220,6 +280,15 @@
     els.verdictRows.innerHTML = rows.map(function (r) {
       var valClass = 'v' + (r[2] ? ' ' + r[2] : '');
       return '<div class="verdict-row"><span class="k">' + r[0] + '</span><span class="' + valClass + '">' + r[1] + '</span></div>';
+    }).join('');
+  }
+
+  function renderAdvice(advice) {
+    if (!els.advice) return;
+    if (!advice.length) { els.advice.innerHTML = ''; return; }
+    var icons = { warn: '⚠️', praise: '🎉', info: 'ℹ️' };
+    els.advice.innerHTML = advice.map(function (a) {
+      return '<div class="advice-card ' + esc(a.type) + '"><span class="ic">' + (icons[a.type] || 'ℹ️') + '</span><span>' + esc(a.text) + '</span></div>';
     }).join('');
   }
 
@@ -329,7 +398,7 @@
     }
     els.ledger.innerHTML = categories.map(function (c) {
       var badge = c.mostlyOneOff ? '<span class="oneoff-badge">egyszeri</span>' : '';
-      return '<div class="ledger-row"><span class="cat-name">' + c.name + badge + '</span><span class="cat-amt">' + fmtFt(c.amount) + '</span></div>';
+      return '<div class="ledger-row"><span class="cat-name">' + esc(c.name) + badge + '</span><span class="cat-amt">' + fmtFt(c.amount) + '</span></div>';
     }).join('');
   }
 
@@ -366,9 +435,9 @@
       return;
     }
     var segs = [
-      ['fix', 'fix (rezsi, hiteltörlesztés)', split.fix],
+      ['fix', 'fix (rezsi, hiteltörlesztés, lakhatás, biztosítás, előfizetések)', split.fix],
       ['var', 'rugalmas (élelmiszer, vendéglátás, autó, egészség)', split.variable],
-      ['other', 'egyéb', split.other]
+      ['other', 'egyéb (tized, adomány, megtakarítás, ajándék, utazás, ...)', split.other]
     ];
     els.splitBar.innerHTML = segs.map(function (s) {
       var pct = (s[2] / total) * 100;
@@ -380,17 +449,20 @@
     }).join('');
   }
 
-  function renderAccounts(accounts) {
+  function renderAccounts(target, accounts, emptyMsg) {
+    if (!target) return;
     if (!accounts.length) {
-      els.accounts.innerHTML = '<div class="acct-card" style="color:var(--ink-3)">Nincs feltöltött számla a Notion &bdquo;Számlák&rdquo; adatbázisban.</div>';
+      target.innerHTML = '<div class="acct-card" style="color:var(--ink-3)">' + emptyMsg + '</div>';
       return;
     }
-    els.accounts.innerHTML = accounts.map(function (a) {
+    target.innerHTML = accounts.map(function (a) {
       var dateStr = a.date ? new Date(a.date).toLocaleDateString('hu-HU') : '—';
+      var note = a.note ? '<div class="acct-note">' + esc(a.note) + '</div>' : '';
       return '<div class="acct-card">' +
-        '<div class="acct-name">' + a.name + (a.bank ? ' &middot; ' + a.bank : '') + '</div>' +
+        '<div class="acct-name">' + esc(a.name) + (a.bank ? ' &middot; ' + esc(a.bank) : '') + '</div>' +
         '<div class="acct-value">' + fmtFt(a.balance) + '</div>' +
         '<div class="acct-date">frissítve: ' + dateStr + '</div>' +
+        note +
         '</div>';
     }).join('');
   }
@@ -417,6 +489,162 @@
       'Nettó vagyon: ' + fmtFt(latest.netWorth) +
       (latest.goal ? ' &middot; cél: ' + fmtFt(latest.goal) + (pct != null ? ' &middot; ' + Math.round(pct) + '% teljesítve' : '') : '') +
       '</div>';
+  }
+
+  // ---- Hitelek --------------------------------------------------------------
+  function renderLoans(loans) {
+    loans = loans || { rows: [], totalRemaining: 0, totalMonthly: 0 };
+    els.loanTotals.innerHTML =
+      '<div class="tile expense"><div class="t-label">fennmaradó tőke összesen</div><div class="t-value">' + fmtFt(loans.totalRemaining) + '</div></div>' +
+      '<div class="tile"><div class="t-label">havi törlesztő összesen</div><div class="t-value">' + fmtFt(loans.totalMonthly) + '</div></div>';
+    if (!loans.rows.length) {
+      els.loans.innerHTML = '<div class="loan-card" style="color:var(--ink-3)">Nincs rögzített hitel a Notion &bdquo;Hitelek&rdquo; adatbázisában.</div>';
+      return;
+    }
+    els.loans.innerHTML = loans.rows.map(function (l) {
+      var end = l.endDate ? new Date(l.endDate).toLocaleDateString('hu-HU') : '—';
+      return '<div class="loan-card">' +
+        '<div class="loan-head"><span class="loan-name">' + esc(l.name) + '</span><span class="loan-lender">' + esc(l.lender) + '</span></div>' +
+        '<div class="loan-rows">' +
+        '<div><span class="k">fennmaradó tőke</span><span class="v">' + fmtFt(l.remaining) + '</span></div>' +
+        '<div><span class="k">havi törlesztő</span><span class="v">' + fmtFt(l.monthly) + '</span></div>' +
+        '<div><span class="k">kamat</span><span class="v">' + (l.ratePct != null ? l.ratePct + '%' : '—') + '</span></div>' +
+        '<div><span class="k">futamidő vége</span><span class="v">' + end + '</span></div>' +
+        '</div>' +
+        (l.note ? '<div class="acct-note" style="margin-top:8px;">' + esc(l.note) + '</div>' : '') +
+        '</div>';
+    }).join('');
+  }
+
+  // ---- Készpénz ---------------------------------------------------------------
+  function renderCash(cash) {
+    cash = cash || { entries: [], summary: {} };
+    var s = cash.summary || {};
+    var people = ['Én', 'Detti'];
+    els.cashSummary.innerHTML = people.map(function (p) {
+      var d = s[p] || { kapott: 0, koltott: 0 };
+      return '<div class="cash-person">' +
+        '<div class="cash-person-name">' + p + '</div>' +
+        '<div class="cash-person-row"><span>kapott</span><span class="v" style="color:var(--income)">' + fmtFt(d.kapott) + '</span></div>' +
+        '<div class="cash-person-row"><span>költött</span><span class="v" style="color:var(--expense)">' + fmtFt(d.koltott) + '</span></div>' +
+        '<div class="cash-person-row"><span>egyenleg</span><span class="v">' + fmtSigned(d.kapott - d.koltott) + '</span></div>' +
+        '</div>';
+    }).join('');
+
+    if (!cash.entries.length) {
+      els.cashEntries.innerHTML = '<div class="cash-entry-row" style="color:var(--ink-3)">Még nincs rögzített készpénztétel.</div>';
+      return;
+    }
+    els.cashEntries.innerHTML = cash.entries.map(function (e) {
+      var dateStr = e.date ? new Date(e.date).toLocaleDateString('hu-HU') : '—';
+      var isIn = e.kind === 'Kapott';
+      return '<div class="cash-entry-row">' +
+        '<span class="who">' + esc(e.person) + '</span>' +
+        '<span class="meta">' + dateStr + (e.note ? ' &middot; ' + esc(e.note) : '') + '</span>' +
+        '<span class="amt ' + (isIn ? 'in' : 'out') + '">' + (isIn ? '+' : '−') + fmtFt(e.amount).replace(/^−/, '') + '</span>' +
+        '</div>';
+    }).join('');
+  }
+
+  function setCashMsg(text, ok) {
+    if (!text) { els.cashMsg.hidden = true; return; }
+    els.cashMsg.hidden = false;
+    els.cashMsg.textContent = text;
+    els.cashMsg.className = 'cash-form-msg ' + (ok ? 'ok' : 'err');
+  }
+
+  els.cashForm.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var cfg = loadConfig();
+    if (!cfg) { showSetup(); return; }
+    var amount = parseInt(els.cashAmount.value, 10);
+    if (!amount || amount <= 0) {
+      setCashMsg('Adj meg egy érvényes összeget.', false);
+      return;
+    }
+    var payload = {
+      person: els.cashPerson.value,
+      kind: els.cashKind.value,
+      amount: amount,
+      note: els.cashNote.value.trim()
+    };
+    els.cashSubmit.disabled = true;
+    els.cashSubmit.textContent = 'Mentés…';
+    setCashMsg('', false);
+
+    fetch(cfg.apiBase + '/api/cash-entry', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + cfg.token, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
+      .then(function () {
+        setCashMsg('Elmentve a Notionba.', true);
+        els.cashAmount.value = '';
+        els.cashNote.value = '';
+        loadDashboard();
+      })
+      .catch(function (err) {
+        setCashMsg('Nem sikerült menteni (' + (err && err.message ? err.message : 'ismeretlen hiba') + ').', false);
+      })
+      .then(function () {
+        els.cashSubmit.disabled = false;
+        els.cashSubmit.textContent = 'Mentés Notionbe';
+      });
+  });
+
+  // ---- Teendők ---------------------------------------------------------------
+  function todoCard(t, i, savingBadge) {
+    var prioClass = t.priority ? 'prio-' + t.priority.toLowerCase() : '';
+    var badges = '';
+    if (t.priority) badges += '<span class="todo-badge ' + prioClass + '">' + esc(t.priority) + '</span>';
+    if (savingBadge && t.estimatedSaving) badges += '<span class="todo-badge saving">~' + fmtFt(t.estimatedSaving) + ' / hó</span>';
+    return '<div class="todo-card">' +
+      (i != null ? '<div class="todo-num">' + (i + 1) + '</div>' : '') +
+      '<div>' +
+      '<div class="todo-name">' + esc(t.name) + '</div>' +
+      (t.description ? '<div class="todo-desc">' + esc(t.description) + '</div>' : '') +
+      '<div class="todo-meta">' + badges + '</div>' +
+      '</div></div>';
+  }
+
+  function renderTodos(todos) {
+    todos = todos || { steps: [], savingIdeas: [], sellIdeas: [] };
+    els.todoSteps.innerHTML = todos.steps.length
+      ? todos.steps.slice(0, 3).map(function (t, i) { return todoCard(t, i, false); }).join('')
+      : '<div class="todo-card" style="color:var(--ink-3)">Nincs rögzített lépés a Notion &bdquo;Teendők&rdquo; adatbázisában.</div>';
+    els.todoSaving.innerHTML = todos.savingIdeas.length
+      ? todos.savingIdeas.map(function (t) { return todoCard(t, null, true); }).join('')
+      : '<div class="todo-card" style="color:var(--ink-3)">Nincs rögzített spórolási ötlet.</div>';
+    els.todoSell.innerHTML = todos.sellIdeas.length
+      ? todos.sellIdeas.map(function (t) { return todoCard(t, null, true); }).join('')
+      : '<div class="todo-card" style="color:var(--ink-3)">Nincs rögzített eladási / cserélési ötlet.</div>';
+  }
+
+  // ---- Tized ---------------------------------------------------------------
+  function renderTithe(giving, verdict) {
+    giving = giving || {};
+    var tiles = [
+      { label: 'tized ebben a hónapban', value: giving.thisMonthTithe },
+      { label: 'gyülekezeti támogatás ebben a hónapban', value: giving.thisMonthChurch },
+      { label: 'javasolt tized (bevétel 10%-a)', value: giving.recommendedTithe }
+    ];
+    els.titheTiles.innerHTML = tiles.map(function (t) {
+      return '<div class="tile"><div class="t-label">' + t.label + '</div><div class="t-value">' + fmtFt(t.value) + '</div></div>';
+    }).join('');
+
+    var note;
+    if (giving.recommendedTithe == null) {
+      note = 'Még nincs elég adat a bevétel átlagához, így a javasolt tizedet sem tudjuk kiszámolni.';
+    } else if (giving.titheGapThisMonth != null && giving.titheGapThisMonth > 1000) {
+      note = 'Ebben a hónapban eddig ' + fmtFt(giving.thisMonthTithe) + ' tized lett rögzítve a Notionban, a szokásos 10%-os elvhez képest még kb. ' + fmtFt(giving.titheGapThisMonth) + ' hiányzik.';
+    } else {
+      note = 'A tized ebben a hónapban eléri (vagy megközelíti) a szokásos 10%-os elvet.';
+    }
+    els.titheNote.textContent = note;
   }
 
   function renderWhatIf(v) {

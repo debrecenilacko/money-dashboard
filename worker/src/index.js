@@ -10,7 +10,7 @@ const NOTION_VERSION = '2022-06-28';
 function corsHeaders() {
   return {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET,OPTIONS',
+    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type,Authorization'
   };
 }
@@ -75,17 +75,30 @@ function monthKey(isoDate) {
   return isoDate ? isoDate.slice(0, 7) : null;
 }
 
+function thisMonthKey() {
+  return new Date().toISOString().slice(0, 7);
+}
+
 // Category buckets for the fix/variable split and the flexible-spend budget cap.
 // NOTE: this only works well for transactions tagged with the newer, finer
-// categories (Hiteltörlesztés / Vendéglátás / étkezés / Egyéb vásárlás /
-// szolgáltatás). Older rows filed simply under "Egyéb" won't be split out
+// categories. Older rows filed simply under "Egyéb" won't be split out
 // automatically — recategorize them by hand in Notion if you want them to
 // count here.
-const FIX_CATEGORIES = new Set(['Rezsi', 'Hiteltörlesztés']);
+const FIX_CATEGORIES = new Set([
+  'Rezsi', 'Hiteltörlesztés', 'Lakhatás/albérlet', 'Biztosítás', 'Előfizetések'
+]);
 const FLEX_BUDGET_CATEGORIES = new Set(['Vendéglátás / étkezés', 'Egyéb vásárlás / szolgáltatás']);
 const VARIABLE_CATEGORIES = new Set([
   'Élelmiszer', 'Vendéglátás / étkezés', 'Egyéb vásárlás / szolgáltatás', 'Autó', 'Egészség'
 ]);
+// Elkülönítve kezelt kategóriák — nem "elköltött" pénz, hanem tized/adomány
+// illetve megtakarítás/befektetés felé irányított összeg. Kimaradnak a
+// fix/rugalmas bontásból, de a saját füleiken meg vannak jelenítve.
+const GIVING_CATEGORIES = new Set(['Tized', 'Gyülekezeti támogatás']);
+const SAVINGS_CATEGORY = 'Megtakarítás/befektetés';
+// A "Számlák" adatbázisban ezekkel a Típus-okkal jelölt sorok kerülnek a
+// Megtakarítások fülre (a folyószámlák helyett).
+const SAVINGS_ACCOUNT_TYPES = new Set(['Befektetés', 'Megtakarítás']);
 
 async function loadTransactions(env, monthsBack) {
   const since = new Date();
@@ -155,7 +168,7 @@ function buildSplit(transactions) {
 
 function buildBudgets(transactions, env) {
   const now = new Date();
-  const thisMonth = now.toISOString().slice(0, 7);
+  const thisMonth = thisMonthKey();
   let food = 0, flex = 0;
   for (const t of transactions) {
     if (t.type !== 'Kiadás' || t.month !== thisMonth) continue;
@@ -172,6 +185,32 @@ function buildBudgets(transactions, env) {
   };
 }
 
+// Tized / gyülekezeti támogatás — mennyit adtunk, és ez hogy viszonyul a
+// bevételhez (hagyományos tizedelvi ökölszabály: 10%).
+function buildGiving(transactions, avgIncome) {
+  const thisMonth = thisMonthKey();
+  let titheThisMonth = 0, churchThisMonth = 0, titheTotal = 0, churchTotal = 0;
+  for (const t of transactions) {
+    if (t.type !== 'Kiadás') continue;
+    if (t.category === 'Tized') {
+      titheTotal += t.amount;
+      if (t.month === thisMonth) titheThisMonth += t.amount;
+    } else if (t.category === 'Gyülekezeti támogatás') {
+      churchTotal += t.amount;
+      if (t.month === thisMonth) churchThisMonth += t.amount;
+    }
+  }
+  const recommendedTithe = avgIncome ? avgIncome * 0.1 : null;
+  return {
+    thisMonthTithe: titheThisMonth,
+    thisMonthChurch: churchThisMonth,
+    periodTithe: titheTotal,
+    periodChurch: churchTotal,
+    recommendedTithe,
+    titheGapThisMonth: recommendedTithe != null ? recommendedTithe - titheThisMonth : null
+  };
+}
+
 async function loadAccounts(env) {
   const pages = await queryAll(env, env.DB_SZAMLAK, { page_size: 100 });
   return pages.map((pg) => {
@@ -181,7 +220,8 @@ async function loadAccounts(env) {
       type: select(p['Típus']),
       bank: text(p['Bank / szolgáltató']),
       balance: num(p['Aktuális egyenleg']),
-      date: date(p['Frissítve'])
+      date: date(p['Frissítve']),
+      note: text(p['Megjegyzés'])
     };
   });
 }
@@ -204,37 +244,232 @@ async function loadNetWorth(env) {
   };
 }
 
+async function loadLoans(env) {
+  if (!env.DB_HITELEK) return { rows: [], totalRemaining: 0, totalMonthly: 0 };
+  const pages = await queryAll(env, env.DB_HITELEK, {
+    sorts: [{ property: 'Name', direction: 'ascending' }],
+    page_size: 100
+  });
+  const rows = pages.map((pg) => {
+    const p = pg.properties;
+    return {
+      name: title(p.Name),
+      lender: text(p['Hitelező']),
+      remaining: num(p['Fennmaradó tőke (Ft)']) || 0,
+      monthly: num(p['Havi törlesztő (Ft)']) || 0,
+      ratePct: num(p['Kamat (%)']),
+      endDate: date(p['Futamidő vége']),
+      note: text(p['Megjegyzés'])
+    };
+  });
+  return {
+    rows,
+    totalRemaining: rows.reduce((s, r) => s + r.remaining, 0),
+    totalMonthly: rows.reduce((s, r) => s + r.monthly, 0)
+  };
+}
+
+async function loadCash(env) {
+  if (!env.DB_KESZPENZ) return { entries: [], summary: {} };
+  const pages = await queryAll(env, env.DB_KESZPENZ, {
+    sorts: [{ property: 'Dátum', direction: 'descending' }],
+    page_size: 100
+  });
+  const entries = pages.map((pg) => {
+    const p = pg.properties;
+    return {
+      name: title(p.Name),
+      date: date(p['Dátum']),
+      person: select(p['Személy']),
+      kind: select(p['Típus']),
+      amount: num(p['Összeg (Ft)']) || 0,
+      note: text(p['Megjegyzés'])
+    };
+  });
+  const summary = { 'Én': { kapott: 0, koltott: 0 }, 'Detti': { kapott: 0, koltott: 0 } };
+  for (const e of entries) {
+    if (!summary[e.person]) continue;
+    if (e.kind === 'Kapott') summary[e.person].kapott += e.amount;
+    else if (e.kind === 'Költött') summary[e.person].koltott += e.amount;
+  }
+  return { entries: entries.slice(0, 30), summary };
+}
+
+async function loadTodos(env) {
+  if (!env.DB_TEENDOK) return { steps: [], savingIdeas: [], sellIdeas: [] };
+  const pages = await queryAll(env, env.DB_TEENDOK, { page_size: 100 });
+  const rows = pages.map((pg) => {
+    const p = pg.properties;
+    return {
+      name: title(p.Name),
+      description: text(p['Leírás']),
+      estimatedSaving: num(p['Becsült megtakarítás (Ft)']),
+      priority: select(p['Prioritás']),
+      kind: select(p['Típus']),
+      status: select(p['Státusz'])
+    };
+  });
+  const notClosed = rows.filter((r) => r.status !== 'Lezárva');
+  const prioRank = { 'Magas': 0, 'Közepes': 1, 'Alacsony': 2 };
+  const byPrio = (a, b) => (prioRank[a.priority] ?? 3) - (prioRank[b.priority] ?? 3);
+  return {
+    steps: notClosed.filter((r) => r.kind === '3 lépés').sort(byPrio),
+    savingIdeas: notClosed.filter((r) => r.kind === 'Spórolási ötlet').sort(byPrio),
+    sellIdeas: notClosed.filter((r) => r.kind === 'Eladás/csere').sort(byPrio)
+  };
+}
+
+// ---- "Ejnye-bejnye" / dicséret tanácsadó ------------------------------------
+function buildAdvice(ctx) {
+  const advice = [];
+  const v = ctx.verdict || {};
+  const savingsRate = ctx.savingsRatePct;
+
+  if (v.deficitCore != null) {
+    if (v.deficitCore < 0) {
+      advice.push({
+        type: 'warn',
+        text: 'Ejnye-bejnye! Az elmúlt hónapok átlagában többet költötök, mint amennyi bejön ' +
+          '(havi ' + Math.round(Math.abs(v.deficitCore)).toLocaleString('hu-HU') + ' Ft a hiány, az egyszeri tételek nélkül is). Ezt hosszabb távon nem lehet fenntartani.'
+      });
+    } else if (savingsRate != null && savingsRate >= 15) {
+      advice.push({
+        type: 'praise',
+        text: 'Szép munka! ' + Math.round(savingsRate) + '%-os megtakarítási rátát tartotok az elmúlt lezárt hónapokban — ez kifejezetten jó arány.'
+      });
+    } else {
+      advice.push({
+        type: 'info',
+        text: 'A bevétel egyelőre fedezi a core kiadásokat, de a megtakarítási ráta még szerényebb (' +
+          (savingsRate != null ? Math.round(savingsRate) + '%' : '—') + '). Van hova fejlődni.'
+      });
+    }
+  }
+
+  const b = ctx.budgets;
+  if (b && b.food && b.food.cap > 0) {
+    const pace = (b.dayOfMonth / b.daysInMonth) * 100;
+    const pct = (b.food.spent / b.food.cap) * 100;
+    if (pct >= 100) {
+      advice.push({ type: 'warn', text: 'Ejnye-bejnye! Az élelmiszerkeretet már túllépted ebben a hónapban (' + Math.round(pct) + '%).' });
+    } else if (pct > pace + 15) {
+      advice.push({ type: 'warn', text: 'Az élelmiszerköltés gyorsabban fogy, mint kellene: a hónap ' + Math.round(pace) + '%-ánál a keret ' + Math.round(pct) + '%-a már elment.' });
+    }
+  }
+  if (b && b.flex && b.flex.cap > 0) {
+    const pace = (b.dayOfMonth / b.daysInMonth) * 100;
+    const pct = (b.flex.spent / b.flex.cap) * 100;
+    if (pct >= 100) {
+      advice.push({ type: 'warn', text: 'Ejnye-bejnye! A vendéglátás / egyéb vásárlás keret is elfogyott már ebben a hónapban (' + Math.round(pct) + '%).' });
+    } else if (pct > pace + 15) {
+      advice.push({ type: 'warn', text: 'A rugalmas keret (vendéglátás / egyéb vásárlás) gyorsabban fogy a vártnál: ' + Math.round(pct) + '% a hónap ' + Math.round(pace) + '%-ánál.' });
+    }
+  }
+
+  const loans = ctx.loans;
+  if (loans && loans.totalMonthly > 0 && v.avgIncome) {
+    const burden = (loans.totalMonthly / v.avgIncome) * 100;
+    if (burden > 40) {
+      advice.push({ type: 'warn', text: 'Ejnye-bejnye! A havi hiteltörlesztések a bevétel ' + Math.round(burden) + '%-át teszik ki — ez elég magas terhelés.' });
+    }
+  }
+
+  const giving = ctx.giving;
+  if (giving && giving.titheGapThisMonth != null && giving.titheGapThisMonth > 0 && v.avgIncome) {
+    advice.push({
+      type: 'info',
+      text: 'Ebben a hónapban eddig ' + Math.round(giving.thisMonthTithe).toLocaleString('hu-HU') + ' Ft tized lett rögzítve — a szokásos 10%-os elvhez képest még ' +
+        Math.round(giving.titheGapThisMonth).toLocaleString('hu-HU') + ' Ft hiányzik (ha még nincs vége a hónapnak, ez lehet, hogy csak időzítés kérdése).'
+    });
+  }
+
+  if (!advice.length) {
+    advice.push({ type: 'info', text: 'Egyelőre nincs különösebb intő jel vagy kiugró eredmény — minden a megszokott mederben.' });
+  }
+  return advice;
+}
+
 async function buildDashboard(env) {
   const transactions = await loadTransactions(env, 4); // this month + 3 full prior months
-  const complete = transactions.filter((t) => t.month !== new Date().toISOString().slice(0, 7)); // exclude current, incomplete month from averages
+  const complete = transactions.filter((t) => t.month !== thisMonthKey()); // exclude current, incomplete month from averages
 
   const trend = buildTrend(complete).slice(-3);
   const avgIncome = trend.length ? trend.reduce((s, m) => s + m.inc, 0) / trend.length : 0;
   const avgCore = trend.length ? trend.reduce((s, m) => s + m.core, 0) / trend.length : 0;
   const avgRaw = trend.length ? trend.reduce((s, m) => s + m.exp, 0) / trend.length : 0;
 
-  const [accounts, netWorth] = await Promise.all([loadAccounts(env), loadNetWorth(env)]);
+  const [accounts, netWorth, loans, cash, todos] = await Promise.all([
+    loadAccounts(env),
+    loadNetWorth(env),
+    loadLoans(env),
+    loadCash(env),
+    loadTodos(env)
+  ]);
   const knownBalance = accounts.reduce((s, a) => s + (a.balance || 0), 0);
+  const savingsAccounts = accounts.filter((a) => SAVINGS_ACCOUNT_TYPES.has(a.type));
+  const regularAccounts = accounts.filter((a) => !SAVINGS_ACCOUNT_TYPES.has(a.type));
+
+  const verdict = {
+    avgIncome,
+    avgCoreExpense: avgCore,
+    avgRawExpense: avgRaw,
+    avgOneOff: avgRaw - avgCore,
+    deficitCore: avgIncome - avgCore,
+    deficitRaw: avgIncome - avgRaw,
+    knownBalance
+  };
+  const savingsRatePct = avgIncome ? ((avgIncome - avgCore) / avgIncome) * 100 : null;
+  const budgets = buildBudgets(transactions, env);
+  const giving = buildGiving(complete.length ? complete : transactions, avgIncome);
+
+  const advice = buildAdvice({ verdict, savingsRatePct, budgets, loans, giving });
 
   return {
     generatedAt: new Date().toISOString(),
-    verdict: {
-      avgIncome,
-      avgCoreExpense: avgCore,
-      avgRawExpense: avgRaw,
-      avgOneOff: avgRaw - avgCore,
-      deficitCore: avgIncome - avgCore,
-      deficitRaw: avgIncome - avgRaw,
-      knownBalance
-    },
-    savingsRatePct: avgIncome ? ((avgIncome - avgCore) / avgIncome) * 100 : null,
+    verdict,
+    savingsRatePct,
     trend,
     categories: buildCategoryLedger(complete),
     split: buildSplit(complete.length ? complete : transactions),
-    budgets: buildBudgets(transactions, env),
-    accounts,
-    netWorth
+    budgets,
+    accounts: regularAccounts,
+    savingsAccounts,
+    netWorth,
+    loans,
+    cash,
+    todos,
+    giving,
+    advice
   };
+}
+
+async function createCashEntry(env, body) {
+  const person = body && body.person;
+  const kind = body && body.kind;
+  const amount = body && Number(body.amount);
+  const note = (body && body.note) || '';
+  const isoDate = (body && body.date) || new Date().toISOString().slice(0, 10);
+
+  if (!['Én', 'Detti'].includes(person)) throw new Error('érvénytelen "person"');
+  if (!['Kapott', 'Költött'].includes(kind)) throw new Error('érvénytelen "kind"');
+  if (!amount || amount <= 0 || isNaN(amount)) throw new Error('érvénytelen "amount"');
+
+  const name = person + ' — ' + kind + ' — ' + amount.toLocaleString('hu-HU') + ' Ft';
+  const page = await notion(env, '/pages', {
+    method: 'POST',
+    body: JSON.stringify({
+      parent: { database_id: env.DB_KESZPENZ },
+      properties: {
+        Name: { title: [{ text: { content: name } }] },
+        'Dátum': { date: { start: isoDate } },
+        'Személy': { select: { name: person } },
+        'Típus': { select: { name: kind } },
+        'Összeg (Ft)': { number: amount },
+        'Megjegyzés': note ? { rich_text: [{ text: { content: note } }] } : { rich_text: [] }
+      }
+    })
+  });
+  return { id: page.id };
 }
 
 export default {
@@ -247,6 +482,11 @@ export default {
     try {
       if (url.pathname === '/api/dashboard' && request.method === 'GET') {
         return json(await buildDashboard(env));
+      }
+      if (url.pathname === '/api/cash-entry' && request.method === 'POST') {
+        const body = await request.json().catch(() => ({}));
+        const result = await createCashEntry(env, body);
+        return json(result, 201);
       }
       return json({ error: 'not found' }, 404);
     } catch (err) {
