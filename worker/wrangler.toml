@@ -5,9 +5,9 @@ compatibility_date = "2024-01-01"
 # Nem-titkos azonosítók (a database ID önmagában nem ad hozzáférést,
 # csak a NOTION_TOKEN-nel együtt jelent bármit).
 [vars]
-DB_SZAMLAK = "f304ca522a994ec9a1ca2a1cee4ca6dd"
-DB_TRANZAKCIOK = "5040b9d639f64e15a3a66b4af1112a9a"
-DB_NETWORTH = "636cc0b71da0470f87059e96b38d7db1"
+DB_SZAMLAK = "75433ba302c34a02a22080a8ee14998f"
+DB_TRANZAKCIOK = "a8c14e0a4e5043368da6036558638bca"
+DB_NETWORTH = "f57d004241e8429c9c0dd82206a95aa4"
 
 # Javasolt havi keretek (Ft) — a "mire ment" widget ezekhez méri a folyó
 # havi Élelmiszer, illetve Vendéglátás/étkezés + Egyéb vásárlás/szolgáltatás
