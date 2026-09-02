@@ -1,0 +1,21 @@
+name = "penztarkonyv-dashboard-api"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# Nem-titkos azonosítók (a database ID önmagában nem ad hozzáférést,
+# csak a NOTION_TOKEN-nel együtt jelent bármit).
+[vars]
+DB_SZAMLAK = "f304ca522a994ec9a1ca2a1cee4ca6dd"
+DB_TRANZAKCIOK = "5040b9d639f64e15a3a66b4af1112a9a"
+DB_NETWORTH = "636cc0b71da0470f87059e96b38d7db1"
+
+# Javasolt havi keretek (Ft) — a "mire ment" widget ezekhez méri a folyó
+# havi Élelmiszer, illetve Vendéglátás/étkezés + Egyéb vásárlás/szolgáltatás
+# kategóriák eddigi összegét. Írd át bátran a sajátodra.
+BUDGET_FOOD_CAP = "360000"
+BUDGET_FLEX_CAP = "245000"
+
+# A NOTION_TOKEN és APP_TOKEN NEM ide kerül — azokat titokként kell
+# beállítani (lásd README):
+#   wrangler secret put NOTION_TOKEN
+#   wrangler secret put APP_TOKEN
