@@ -49,6 +49,13 @@
     todoSell: document.getElementById('todoSell'),
     titheTiles: document.getElementById('titheTiles'),
     titheNote: document.getElementById('titheNote'),
+    projectSpend: document.getElementById('projectSpend'),
+    networthSvg: document.getElementById('networthSvg'),
+    payoffSlider: document.getElementById('payoffSlider'),
+    payoffValue: document.getElementById('payoffValue'),
+    payoffDateBase: document.getElementById('payoffDateBase'),
+    payoffDateExtra: document.getElementById('payoffDateExtra'),
+    payoffInterestSaved: document.getElementById('payoffInterestSaved'),
     cutSlider: document.getElementById('cutSlider'),
     cutValue: document.getElementById('cutValue'),
     outBalance: document.getElementById('outBalance'),
@@ -249,10 +256,13 @@
     renderAccounts(els.accounts, data.accounts || [], 'Nincs feltöltött számla a Notion &bdquo;Számlák&rdquo; adatbázisban.');
     renderAccounts(els.savingsAccounts, data.savingsAccounts || [], 'Még nincs feltöltve megtakarítási / befektetési számla — vedd fel a Notion &bdquo;Számlák&rdquo; adatbázisában (pl. IBKR, TBSZ, Lakástakarékpénztár).');
     renderGoals(data.netWorth);
+    renderNetworthChart(data.netWorth);
     renderLoans(data.loans);
+    renderPayoffSimulator(data.loans);
     renderCash(data.cash);
     renderTodos(data.todos);
     renderTithe(data.giving, data.verdict);
+    renderProjectSpend(data.projectSpend);
     renderWhatIf(data.verdict);
   }
 
@@ -491,6 +501,72 @@
       '</div>';
   }
 
+  // ---- Nettó vagyon trend + FIRE cél -----------------------------------------
+  function renderNetworthChart(netWorth) {
+    var svg = els.networthSvg;
+    if (!svg) return;
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    var rows = ((netWorth && netWorth.rows) || []).slice().reverse(); // backend: descending -> chart: ascending
+    if (rows.length < 2) {
+      var msg = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      msg.setAttribute('x', '350');
+      msg.setAttribute('y', '110');
+      msg.setAttribute('text-anchor', 'middle');
+      msg.setAttribute('class', 'axislabel');
+      msg.textContent = 'Még nincs elég havi nettó vagyon adat a trendhez.';
+      svg.appendChild(msg);
+      return;
+    }
+
+    var padL = 56, padR = 20, top = 16, base = 178, labelY = 202;
+    var goal = rows[rows.length - 1].goal;
+    var values = rows.map(function (r) { return r.netWorth || 0; });
+    var maxVal = Math.max.apply(null, values.concat(goal ? [goal] : []).concat([1]));
+    var minVal = Math.min.apply(null, values.concat([0]));
+    var magnitude = Math.pow(10, Math.floor(Math.log(Math.max(maxVal, 1)) / Math.LN10));
+    maxVal = Math.ceil(maxVal / (magnitude / 2)) * (magnitude / 2);
+
+    var n = rows.length;
+    var xStep = n > 1 ? (700 - padL - padR) / (n - 1) : 0;
+    var x = function (i) { return padL + i * xStep; };
+    var y = function (v) { return base - ((v - minVal) / (maxVal - minVal || 1)) * (base - top); };
+
+    var ns = 'http://www.w3.org/2000/svg';
+    function el(tag, attrs) {
+      var e = document.createElementNS(ns, tag);
+      for (var k in attrs) e.setAttribute(k, attrs[k]);
+      return e;
+    }
+
+    [0, 0.5, 1].forEach(function (f) {
+      var gy = base - f * (base - top);
+      svg.appendChild(el('line', { x1: padL, x2: 700 - padR, y1: gy, y2: gy, class: 'gridline' }));
+      var lbl = el('text', { x: padL - 8, y: gy + 3, class: 'axislabel', 'text-anchor': 'end' });
+      lbl.textContent = Math.round((minVal + (maxVal - minVal) * f) / 1000).toLocaleString('hu-HU') + 'E';
+      svg.appendChild(lbl);
+    });
+
+    if (goal) {
+      var gy2 = y(goal);
+      svg.appendChild(el('line', { x1: padL, x2: 700 - padR, y1: gy2, y2: gy2, class: 'line-core' }));
+    }
+
+    var d = rows.map(function (r, i) {
+      return (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ' ' + y(r.netWorth || 0).toFixed(1);
+    }).join(' ');
+    svg.appendChild(el('path', { d: d, class: 'line-income' }));
+
+    rows.forEach(function (r, i) {
+      svg.appendChild(el('circle', { cx: x(i), cy: y(r.netWorth || 0), r: 4, class: 'dot inc' }));
+      // Only label every other point (or all, if few) to avoid crowding.
+      if (n <= 8 || i % Math.ceil(n / 8) === 0 || i === n - 1) {
+        var lbl2 = el('text', { x: x(i), y: labelY, class: 'monthlabel' });
+        lbl2.textContent = r.date ? fmtMonthLabel(r.date.slice(0, 7)) : '';
+        svg.appendChild(lbl2);
+      }
+    });
+  }
+
   // ---- Hitelek --------------------------------------------------------------
   function renderLoans(loans) {
     loans = loans || { rows: [], totalRemaining: 0, totalMonthly: 0 };
@@ -513,6 +589,107 @@
         '<div><span class="k">futamidő vége</span><span class="v">' + end + '</span></div>' +
         '</div>' +
         (l.note ? '<div class="acct-note" style="margin-top:8px;">' + esc(l.note) + '</div>' : '') +
+        '</div>';
+    }).join('');
+  }
+
+  // ---- Hiteltörlesztési szimulátor (lavina-módszer) --------------------------
+  function renderPayoffSimulator(loans) {
+    loans = loans || { rows: [] };
+    var rows = (loans.rows || []).filter(function (l) { return l.remaining > 0; });
+
+    function monthsToPayoff(extraMonthly) {
+      // Klónozzuk a hiteleket, hogy ne módosítsuk az eredeti adatot.
+      var sims = rows.map(function (l) {
+        return {
+          remaining: l.remaining || 0,
+          monthly: l.monthly || 0,
+          rate: (l.ratePct != null ? l.ratePct : 0) / 100 / 12 // havi kamat
+        };
+      });
+      var extra = extraMonthly || 0;
+      var totalInterest = 0;
+      var month = 0;
+      var maxMonths = 720; // 60 év védőkorlát, ha valami elszállna
+      while (sims.some(function (s) { return s.remaining > 0.5; }) && month < maxMonths) {
+        month++;
+        // Lavina: a futó hitelek közül a legmagasabb kamatú kapja a plusz összeget,
+        // plusz minden törlesztett hitel felszabaduló minimuma "legördül" a következőre.
+        var active = sims.filter(function (s) { return s.remaining > 0.5; });
+        active.sort(function (a, b) { return b.rate - a.rate; });
+        var pool = extra;
+        active.forEach(function (s) {
+          var interest = s.remaining * s.rate;
+          totalInterest += interest;
+          s.remaining += interest;
+          var pay = s.monthly + pool;
+          pool = 0; // az elsőnek (legmagasabb kamatú) adjuk a szabad keretet
+          if (pay >= s.remaining) {
+            pool += pay - s.remaining;
+            s.remaining = 0;
+          } else {
+            s.remaining -= pay;
+          }
+        });
+        // A pool-ban maradt (felszabadult) összeg a következő hónapban is a
+        // legmagasabb kamatúra megy, mert újraszámoljuk az active listát.
+        if (pool > 0) {
+          var stillActive = sims.filter(function (s) { return s.remaining > 0.5; });
+          if (stillActive.length) {
+            stillActive.sort(function (a, b) { return b.rate - a.rate; });
+            var top = stillActive[0];
+            var pay2 = Math.min(pool, top.remaining);
+            top.remaining -= pay2;
+          }
+        }
+      }
+      return { months: month, totalInterest: totalInterest };
+    }
+
+    function addMonths(n) {
+      var d = new Date();
+      d.setMonth(d.getMonth() + n);
+      return d.toLocaleDateString('hu-HU', { year: 'numeric', month: 'long' });
+    }
+
+    function update() {
+      var extra = parseInt(els.payoffSlider.value, 10) || 0;
+      els.payoffValue.textContent = extra.toLocaleString('hu-HU') + ' Ft/hó';
+
+      if (!rows.length) {
+        els.payoffDateBase.textContent = '—';
+        els.payoffDateExtra.textContent = '—';
+        els.payoffInterestSaved.textContent = '—';
+        return;
+      }
+
+      var base = monthsToPayoff(0);
+      var withExtra = monthsToPayoff(extra);
+
+      els.payoffDateBase.textContent = addMonths(base.months) + ' (' + base.months + ' hónap)';
+      els.payoffDateExtra.textContent = addMonths(withExtra.months) + ' (' + withExtra.months + ' hónap)';
+
+      var saved = base.totalInterest - withExtra.totalInterest;
+      els.payoffInterestSaved.textContent = fmtFt(Math.max(0, saved));
+    }
+
+    els.payoffSlider.oninput = update;
+    update();
+  }
+
+  // ---- Kurjancs & Fóti önellátás projekt-költések ----------------------------
+  function renderProjectSpend(projectSpend) {
+    projectSpend = projectSpend || {};
+    var defs = [
+      { key: 'kurjancs', name: 'Kurjancs' },
+      { key: 'fot', name: 'Fóti önellátás' }
+    ];
+    els.projectSpend.innerHTML = defs.map(function (d) {
+      var p = projectSpend[d.key] || { thisMonth: 0, period: 0 };
+      return '<div class="project-card">' +
+        '<div class="p-name">' + esc(d.name) + '</div>' +
+        '<div class="p-row"><span>ebben a hónapban</span><span class="v">' + fmtFt(p.thisMonth) + '</span></div>' +
+        '<div class="p-row"><span>eddig összesen</span><span class="v">' + fmtFt(p.period) + '</span></div>' +
         '</div>';
     }).join('');
   }
@@ -631,7 +808,8 @@
     var tiles = [
       { label: 'tized ebben a hónapban', value: giving.thisMonthTithe },
       { label: 'gyülekezeti támogatás ebben a hónapban', value: giving.thisMonthChurch },
-      { label: 'javasolt tized (bevétel 10%-a)', value: giving.recommendedTithe }
+      { label: 'javasolt tized (bevétel 10%-a)', value: giving.recommendedTithe },
+      { label: 'megtakarítás/befektetés ebben a hónapban', value: giving.thisMonthSavingsTransfer }
     ];
     els.titheTiles.innerHTML = tiles.map(function (t) {
       return '<div class="tile"><div class="t-label">' + t.label + '</div><div class="t-value">' + fmtFt(t.value) + '</div></div>';

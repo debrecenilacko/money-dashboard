@@ -234,6 +234,13 @@
   /* ---- Tithe ---- */
   .tithe-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;}
 
+  /* ---- Project spend (Kurjancs / Fót) ---- */
+  .project-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .project-card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; box-shadow:var(--shadow);}
+  .project-card .p-name{font-family:var(--font-display); font-weight:600; font-size:14px; margin-bottom:8px;}
+  .project-card .p-row{display:flex; justify-content:space-between; font-size:12.5px; margin-top:4px; color:var(--ink-2);}
+  .project-card .p-row .v{font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--ink);}
+
   footer{margin-top:44px; padding-top:16px; border-top:1px solid var(--border); font-size:11px; color:var(--ink-3); line-height:1.6;}
 
   /* ---- Setup overlay ---- */
@@ -257,6 +264,7 @@
     .cash-summary{grid-template-columns:1fr;}
     .cash-form-grid{grid-template-columns:1fr;}
     .tithe-grid{grid-template-columns:1fr;}
+    .project-grid{grid-template-columns:1fr;}
   }
 </style>
 </head>
@@ -379,6 +387,10 @@
       <div class="split-bar" id="splitBar"></div>
       <div class="split-legend" id="splitLegend"></div>
     </section>
+    <section>
+      <div class="eyebrow">Kurjancs &amp; Fóti önellátás projekt-költések</div>
+      <div class="project-grid" id="projectSpend"></div>
+    </section>
   </div>
 
   <!-- ============================= VAGYON ============================= -->
@@ -390,6 +402,10 @@
     <section>
       <div class="eyebrow">célok</div>
       <div id="goals"></div>
+      <div class="chart-card" style="margin-top:12px;">
+        <div class="legend"><span><i class="inc"></i>nettó vagyon</span><span><i class="core"></i>FIRE cél</span></div>
+        <svg id="networthSvg" viewBox="0 0 700 220" preserveAspectRatio="none"></svg>
+      </div>
     </section>
   </div>
 
@@ -407,6 +423,22 @@
       <div class="loan-totals" id="loanTotals"></div>
       <div class="eyebrow">futó hitelek</div>
       <div class="loan-grid" id="loans"></div>
+    </section>
+    <section>
+      <div class="eyebrow">mi lenne, ha többet fizetnél havonta</div>
+      <div class="whatif-card">
+        <div class="whatif-row">
+          <label for="payoffSlider" style="font-size:12px;color:var(--ink-2);">plusz havi törlesztés (a legmagasabb kamatú hitelre megy először)</label>
+          <input type="range" id="payoffSlider" min="0" max="300000" step="10000" value="0">
+          <div class="whatif-cut" id="payoffValue">0 Ft/hó</div>
+        </div>
+        <div class="whatif-outputs">
+          <div><div class="t-label">adósságmentes ekkor</div><div class="whatif-num" id="payoffDateBase">&mdash;</div></div>
+          <div><div class="t-label">a plusszal ekkor</div><div class="whatif-num" id="payoffDateExtra" style="color:var(--income)">&mdash;</div></div>
+          <div><div class="t-label">megspórolt kamat</div><div class="whatif-num" id="payoffInterestSaved" style="color:var(--gold)">&mdash;</div></div>
+        </div>
+        <div style="font-size:11px;color:var(--ink-3);margin-top:14px;line-height:1.5;">Lavina-módszerrel számol: a plusz összeg mindig a legmagasabb kamatú futó hitelre megy, egy hitel törlesztése után pedig annak teljes havi részlete is a következőre száll. Az ismeretlen kamatú hiteleket (pl. lízing) 0%-kal veszi figyelembe.</div>
+      </div>
     </section>
   </div>
 

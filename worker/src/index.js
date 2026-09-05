@@ -75,8 +75,23 @@ function monthKey(isoDate) {
   return isoDate ? isoDate.slice(0, 7) : null;
 }
 
+// Cloudflare Workers run in UTC. Most of the day that's irrelevant, but right
+// around midnight it can put "today"/"this month" a day off from what it
+// actually is in Hungary. This returns a Date whose UTC-getters read back the
+// current Europe/Budapest wall-clock time, so thisMonthKey()/day-of-month/etc.
+// all agree with what the person actually sees on their phone.
+function nowHU() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Budapest',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+  }).formatToParts(new Date());
+  const get = (t) => Number(parts.find((p) => p.type === t).value);
+  return new Date(Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second')));
+}
+
 function thisMonthKey() {
-  return new Date().toISOString().slice(0, 7);
+  return nowHU().toISOString().slice(0, 7);
 }
 
 // Category buckets for the fix/variable split and the flexible-spend budget cap.
@@ -91,17 +106,19 @@ const FLEX_BUDGET_CATEGORIES = new Set(['Vendéglátás / étkezés', 'Egyéb v�
 const VARIABLE_CATEGORIES = new Set([
   'Élelmiszer', 'Vendéglátás / étkezés', 'Egyéb vásárlás / szolgáltatás', 'Autó', 'Egészség'
 ]);
-// Elkülönítve kezelt kategóriák — nem "elköltött" pénz, hanem tized/adomány
-// illetve megtakarítás/befektetés felé irányított összeg. Kimaradnak a
-// fix/rugalmas bontásból, de a saját füleiken meg vannak jelenítve.
-const GIVING_CATEGORIES = new Set(['Tized', 'Gyülekezeti támogatás']);
+// Elkülönítve kezelt kategória — nem "elköltött" pénz, hanem megtakarítás/
+// befektetés felé irányított összeg. Kimarad a fix/rugalmas bontásból, de a
+// Tized fülön külön kimutatjuk, mennyit tettünk félre tudatosan.
 const SAVINGS_CATEGORY = 'Megtakarítás/befektetés';
 // A "Számlák" adatbázisban ezekkel a Típus-okkal jelölt sorok kerülnek a
 // Megtakarítások fülre (a folyószámlák helyett).
 const SAVINGS_ACCOUNT_TYPES = new Set(['Befektetés', 'Megtakarítás']);
+// Kurjancs / Fóti önellátás projekt-költések — ezek is a "Kategória" mezőben
+// már meglévő kategóriák, csak eddig nem volt hozzájuk külön kimutatás.
+const PROJECT_CATEGORIES = { 'Kurjancs': 'kurjancs', 'Fóti önellátás': 'fot' };
 
 async function loadTransactions(env, monthsBack) {
-  const since = new Date();
+  const since = nowHU();
   since.setUTCMonth(since.getUTCMonth() - monthsBack);
   since.setUTCDate(1);
   const sinceISO = since.toISOString().slice(0, 10);
@@ -167,7 +184,7 @@ function buildSplit(transactions) {
 }
 
 function buildBudgets(transactions, env) {
-  const now = new Date();
+  const now = nowHU();
   const thisMonth = thisMonthKey();
   let food = 0, flex = 0;
   for (const t of transactions) {
@@ -187,9 +204,12 @@ function buildBudgets(transactions, env) {
 
 // Tized / gyülekezeti támogatás — mennyit adtunk, és ez hogy viszonyul a
 // bevételhez (hagyományos tizedelvi ökölszabály: 10%).
+// FONTOS: ide a TELJES (a folyó, még nem zárt hónapot is tartalmazó)
+// tranzakció-listát kell adni — "ebben a hónapban mennyi tized" csak úgy
+// számolható, ha a folyó hónap tranzakciói is benne vannak.
 function buildGiving(transactions, avgIncome) {
   const thisMonth = thisMonthKey();
-  let titheThisMonth = 0, churchThisMonth = 0, titheTotal = 0, churchTotal = 0;
+  let titheThisMonth = 0, churchThisMonth = 0, titheTotal = 0, churchTotal = 0, savingsThisMonth = 0, savingsTotal = 0;
   for (const t of transactions) {
     if (t.type !== 'Kiadás') continue;
     if (t.category === 'Tized') {
@@ -198,6 +218,9 @@ function buildGiving(transactions, avgIncome) {
     } else if (t.category === 'Gyülekezeti támogatás') {
       churchTotal += t.amount;
       if (t.month === thisMonth) churchThisMonth += t.amount;
+    } else if (t.category === SAVINGS_CATEGORY) {
+      savingsTotal += t.amount;
+      if (t.month === thisMonth) savingsThisMonth += t.amount;
     }
   }
   const recommendedTithe = avgIncome ? avgIncome * 0.1 : null;
@@ -206,9 +229,29 @@ function buildGiving(transactions, avgIncome) {
     thisMonthChurch: churchThisMonth,
     periodTithe: titheTotal,
     periodChurch: churchTotal,
+    thisMonthSavingsTransfer: savingsThisMonth,
+    periodSavingsTransfer: savingsTotal,
     recommendedTithe,
     titheGapThisMonth: recommendedTithe != null ? recommendedTithe - titheThisMonth : null
   };
+}
+
+// Kurjancs / Fóti önellátás — mennyi ment bele eddig, külön a mindennapi
+// kiadásoktól, hogy lássuk mekkora tétel a két önellátási projekt.
+function buildProjectSpend(transactions) {
+  const thisMonth = thisMonthKey();
+  const result = {
+    kurjancs: { thisMonth: 0, period: 0 },
+    fot: { thisMonth: 0, period: 0 }
+  };
+  for (const t of transactions) {
+    if (t.type !== 'Kiadás') continue;
+    const key = PROJECT_CATEGORIES[t.category];
+    if (!key) continue;
+    result[key].period += t.amount;
+    if (t.month === thisMonth) result[key].thisMonth += t.amount;
+  }
+  return result;
 }
 
 async function loadAccounts(env) {
@@ -248,7 +291,9 @@ async function loadNetWorth(env) {
 // a kamat (ha ismert) a Megjegyzés szövegében szerepel ("kamat 12.49%" stb.),
 // onnan próbáljuk kiolvasni.
 function extractRatePct(note) {
-  var m = note && note.match(/kamat[:\s]*([\d.,]+)\s*%/i);
+  if (!note) return null;
+  // Kétféle sorrendben szokott előfordulni: "kamat 5.42%" vagy "0% kamat".
+  var m = note.match(/kamat[:\s]*([\d.,]+)\s*%/i) || note.match(/([\d.,]+)\s*%\s*kamat/i);
   return m ? parseFloat(m[1].replace(',', '.')) : null;
 }
 
@@ -430,7 +475,10 @@ async function buildDashboard(env) {
   };
   const savingsRatePct = avgIncome ? ((avgIncome - avgCore) / avgIncome) * 100 : null;
   const budgets = buildBudgets(transactions, env);
-  const giving = buildGiving(complete.length ? complete : transactions, avgIncome);
+  // A teljes (folyó hónapot is tartalmazó) listát adjuk, különben "ebben a
+  // hónapban" mindig 0-t mutatna — lásd a buildGiving fenti megjegyzését.
+  const giving = buildGiving(transactions, avgIncome);
+  const projectSpend = buildProjectSpend(transactions);
 
   const advice = buildAdvice({ verdict, savingsRatePct, budgets, loans, giving });
 
@@ -449,6 +497,7 @@ async function buildDashboard(env) {
     cash,
     todos,
     giving,
+    projectSpend,
     advice
   };
 }
@@ -458,7 +507,7 @@ async function createCashEntry(env, body) {
   const kind = body && body.kind;
   const amount = body && Number(body.amount);
   const note = (body && body.note) || '';
-  const isoDate = (body && body.date) || new Date().toISOString().slice(0, 10);
+  const isoDate = (body && body.date) || nowHU().toISOString().slice(0, 10);
 
   if (!['Én', 'Detti'].includes(person)) throw new Error('érvénytelen "person"');
   if (!['Kapott', 'Költött'].includes(kind)) throw new Error('érvénytelen "kind"');
@@ -482,6 +531,62 @@ async function createCashEntry(env, body) {
   return { id: page.id };
 }
 
+// ---- Heti összefoglaló push értesítés (ntfy.sh) ----------------------------
+function fmtFt(n) {
+  if (n == null || isNaN(n)) return '—';
+  return Math.round(n).toLocaleString('hu-HU') + ' Ft';
+}
+
+function buildDigestMessage(d) {
+  const v = d.verdict || {};
+  const lines = [];
+  lines.push('📋 Pénztárkönyv — heti összefoglaló');
+  lines.push('');
+  lines.push('Havi egyenleg (átlag, core): ' + fmtFt(v.deficitCore));
+  lines.push('Megtakarítási ráta: ' + (d.savingsRatePct != null ? Math.round(d.savingsRatePct) + '%' : '—'));
+  if (d.budgets) {
+    const f = d.budgets.food, x = d.budgets.flex;
+    if (f && f.cap > 0) lines.push('Élelmiszer keret: ' + fmtFt(f.spent) + ' / ' + fmtFt(f.cap));
+    if (x && x.cap > 0) lines.push('Rugalmas keret: ' + fmtFt(x.spent) + ' / ' + fmtFt(x.cap));
+  }
+  if (d.loans && d.loans.totalMonthly) {
+    lines.push('Havi hiteltörlesztés összesen: ' + fmtFt(d.loans.totalMonthly));
+  }
+  if (d.giving) {
+    lines.push('Tized ebben a hónapban: ' + fmtFt(d.giving.thisMonthTithe));
+  }
+  if (d.advice && d.advice.length) {
+    lines.push('');
+    lines.push('Tanácsok:');
+    for (const a of d.advice) {
+      const icon = a.type === 'warn' ? '⚠️' : a.type === 'praise' ? '🎉' : 'ℹ️';
+      lines.push(icon + ' ' + a.text);
+    }
+  }
+  return lines.join('\n');
+}
+
+async function sendNtfy(env, message) {
+  if (!env.NTFY_TOPIC || env.NTFY_TOPIC.indexOf('REPLACE_WITH') === 0) return;
+  await fetch('https://ntfy.sh/' + env.NTFY_TOPIC, {
+    method: 'POST',
+    headers: {
+      // A Title/Tags fejléceknek ASCII-nak kell lenniük — az ékezetes szöveg
+      // ezért az üzenet törzsében megy, nem fejlécben.
+      'Tags': 'moneybag',
+      'Priority': 'default',
+      'Content-Type': 'text/plain; charset=utf-8'
+    },
+    body: message
+  });
+}
+
+async function sendWeeklyDigest(env) {
+  const dashboard = await buildDashboard(env);
+  const message = buildDigestMessage(dashboard);
+  await sendNtfy(env, message);
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') return new Response(null, { headers: corsHeaders() });
@@ -498,9 +603,20 @@ export default {
         const result = await createCashEntry(env, body);
         return json(result, 201);
       }
+      // Kézi teszteléshez: ugyanazt küldi el, mint a heti automatikus digest,
+      // de bármikor meghívható, nem kell rá várni vasárnap estig.
+      if (url.pathname === '/api/send-digest' && request.method === 'POST') {
+        await sendWeeklyDigest(env);
+        return json({ ok: true });
+      }
       return json({ error: 'not found' }, 404);
     } catch (err) {
       return json({ error: String(err && err.message ? err.message : err) }, 500);
     }
+  },
+
+  // Cloudflare Cron Trigger hívja meg — lásd wrangler.toml [triggers].
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(sendWeeklyDigest(env));
   }
 };
