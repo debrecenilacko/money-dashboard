@@ -35,8 +35,11 @@ NTFY_TOPIC = "REPLACE_WITH_YOUR_OWN_RANDOM_TOPIC"
 # mindig UTC-ben fut (nem igazodik a nyári/téli időszámításhoz) — ez az érték
 # vasárnap 18:00 UTC-nek felel meg, ami magyar idő szerint nyáron 20:00,
 # télen 19:00. Írd át, ha más időpontot szeretnél (crontab.guru segít).
+# FONTOS: a Cloudflare a hét napjait 1(vasárnap)–7(szombat) szerint számozza,
+# NEM a szokásos 0(vasárnap)–6(szombat) crontab-konvenció szerint — ezért itt
+# a "SUN"/"MON"/... rövidítéseket használjuk, hogy elkerüljük a félreértést.
 [triggers]
-crons = ["0 18 * * 0"]
+crons = ["0 18 * * SUN"]
 
 # A NOTION_TOKEN és APP_TOKEN NEM ide kerül — azokat titokként kell
 # beállítani (lásd README):
